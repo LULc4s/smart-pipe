@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+
 volatile int contPulse = 0;
 unsigned long beforeTimer = 0;
 const float METRIC_FLOW = 450; 
@@ -78,7 +79,8 @@ void loop() {
     countCurrent = contPulse;
     contPulse = 0;
     interrupts();  
-
+    
+    if(countCurrent > 0) {
     float current_flow = ( (float)countCurrent / METRIC_FLOW) * 60.0;
     
     Serial.println("\n-------------------------------------------");
@@ -88,46 +90,49 @@ void loop() {
 
     current_minute++;
     if(current_minute >= 60) {
-      current_minute = 0;
-      current_hour++;
-      if(current_hour >= 24) {
-        current_hour = 0;
-        current_day = (current_day + 1) % 7;
-      }
+          current_minute = 0;
+          current_hour++;
+          if(current_hour >= 24) {
+            current_hour = 0;
+            current_day = (current_day + 1) % 7;
+          }
+        }
+
+        float vazao_lag_15m = vazao_history[(history_index - 15 + HISTORY_SIZE) % HISTORY_SIZE];
+        float vazao_lag_1h = vazao_history[(history_index - 60 + HISTORY_SIZE) % HISTORY_SIZE];
+        float vazao_lag_24h = vazao_history[history_index]; 
+        
+        float features[5] = {
+          (float)current_hour,
+          (float)current_day,
+          vazao_lag_15m,
+          vazao_lag_1h,
+          vazao_lag_24h
+        };
+
+        for (int i = 0; i < 5; i++) {
+            input->data.f[i] = (features[i] - X_min[i]) * X_scale[i];
+        }
+        
+        if (interpreter->Invoke() != kTfLiteOk) {
+            error_reporter->Report("A inferência falhou.");
+            return;
+        }
+
+        float predicted_scaled = output->data.f[0];
+        float predicted_real = (predicted_scaled / y_scale) + y_min;
+
+        Serial.print("PREVISÃO PARA O PRÓXIMO PERÍODO: ");
+        Serial.print(predicted_real, 2);
+        Serial.println(" L/min");
+        Serial.println("-------------------------------------------");
+
+        vazao_history[history_index] = current_flow;
+        history_index = (history_index + 1) % HISTORY_SIZE; 
+
+        beforeTimer = millis(); 
+      } 
+    } else{ 
+      Serial.println("SEM vazão! ");
     }
-
-    float vazao_lag_15m = vazao_history[(history_index - 15 + HISTORY_SIZE) % HISTORY_SIZE];
-    float vazao_lag_1h = vazao_history[(history_index - 60 + HISTORY_SIZE) % HISTORY_SIZE];
-    float vazao_lag_24h = vazao_history[history_index]; 
-    
-    float features[5] = {
-      (float)current_hour,
-      (float)current_day,
-      vazao_lag_15m,
-      vazao_lag_1h,
-      vazao_lag_24h
-    };
-
-    for (int i = 0; i < 5; i++) {
-        input->data.f[i] = (features[i] - X_min[i]) * X_scale[i];
-    }
-    
-    if (interpreter->Invoke() != kTfLiteOk) {
-        error_reporter->Report("A inferência falhou.");
-        return;
-    }
-
-    float predicted_scaled = output->data.f[0];
-    float predicted_real = (predicted_scaled / y_scale) + y_min;
-
-    Serial.print("PREVISÃO PARA O PRÓXIMO PERÍODO: ");
-    Serial.print(predicted_real, 2);
-    Serial.println(" L/min");
-    Serial.println("-------------------------------------------");
-
-    vazao_history[history_index] = current_flow;
-    history_index = (history_index + 1) % HISTORY_SIZE; 
-
-    beforeTimer = millis(); 
-  }
 }
