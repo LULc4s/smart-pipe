@@ -2,7 +2,10 @@
 
 volatile int contPulse = 0;
 unsigned long beforeTimer = 0;
-const float METRIC_FLOW = 450; 
+unsigned long lastWaterFlow = 0;  // Tempo da última detecção de fluxo
+const float METRIC_FLOW = 450;
+const unsigned long NO_WATER_THRESHOLD = 60000; // 1 minuto (o ideal seria mais tempo, mas coloquei 1 minuto pra testar) sem fluxo = possível falta de água
+bool waterShortageAlerted = false;  // Controle para não repetir alerta
 
 void IRAM_ATTR inpulse() {
   contPulse++;
@@ -84,6 +87,21 @@ void loop() {
     interrupts();  
 
     float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0; // L/min
+
+    // Verifica se há fluxo de água
+    if (current_flow > 0.01) {
+        lastWaterFlow = millis();
+        waterShortageAlerted = false;  // Reseta o alerta quando detecta fluxo
+    } else {
+        // Verifica se passou do tempo limite sem fluxo
+        if (!waterShortageAlerted && (millis() - lastWaterFlow) > NO_WATER_THRESHOLD) {
+            Serial.println("\n!!!ALERTA!!!");
+            Serial.println("POSSÍVEL FALTA DE ÁGUA DETECTADA!");
+            Serial.println("Nenhum fluxo detectado no último minuto."); // Em um mundo real, seria ideal um tempo maior, como 12 hora
+            Serial.println("!!!ALERTA!!!\n");
+            waterShortageAlerted = true;  // Evita repetição do alerta
+        }
+    }
 
     Serial.println("\n-------------------------------------------");
     Serial.print("VAZÃO MEDIDA ATUALMENTE: ");
