@@ -188,7 +188,18 @@ void loop() {
 
     vazao_history[history_index] = current_flow;
     history_index = (history_index + 1) % HISTORY_SIZE; 
-
+    
+    dataFile = SD.open("/vazao.csv", FILE_APPEND);
+    if (dataFile) {
+      dataFile.print(current_day);
+      dataFile.print(",");
+      dataFile.print(current_hour);
+      dataFile.print(",");
+      dataFile.print(current_minute);
+      dataFile.print(",");
+      dataFile.println(current_flow, 2);
+      dataFile.close();
+    }
     beforeTimer = millis(); 
   }
 }
