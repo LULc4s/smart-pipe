@@ -1,4 +1,15 @@
 #include <Arduino.h>
+#include "TensorFlowLite_ESP32.h"
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/schema/schema_generated.h"
+#include <Wire.h>             
+#include <RTClib.h>
+
+#include "modelo_vazao.h"
+
+RTC_DS3231 rtc;
 
 volatile int contPulse = 0;
 unsigned long beforeTimer = 0;
@@ -10,14 +21,6 @@ bool waterShortageAlerted = false;  // Controle para não repetir alerta
 void IRAM_ATTR inpulse() {
   contPulse++;
 }
-
-#include "TensorFlowLite_ESP32.h"
-#include "tensorflow/lite/micro/all_ops_resolver.h"
-#include "tensorflow/lite/micro/micro_error_reporter.h"
-#include "tensorflow/lite/micro/micro_interpreter.h"
-#include "tensorflow/lite/schema/schema_generated.h"
-
-#include "modelo_vazao.h"
 
 tflite::ErrorReporter* error_reporter = nullptr;
 const tflite::Model* model = nullptr;
@@ -48,6 +51,13 @@ float erro_hidrometro = 0.0;
 
 void setup() {
   Serial.begin(115200);
+
+  if (!rtc.begin()) {
+    Serial.println("ERRO: Não foi possível encontrar o RTC!");
+    Serial.println("Verifique a conexão nos pinos SDA(21) e SCL(22).");
+    while (1) delay(10); // Trava o código aqui se o RTC falhar
+  }
+  Serial.println("RTC DS3231 inicializado.");
 
   pinMode(15, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(15), inpulse, FALLING);
@@ -141,15 +151,11 @@ void loop() {
     }
 
     // Atualização do histórico para previsão 
-    current_minute++;
-    if(current_minute >= 60) {
-      current_minute = 0;
-      current_hour++;
-      if(current_hour >= 24) {
-        current_hour = 0;
-        current_day = (current_day + 1) % 7;
-      }
-    }
+    DateTime now = rtc.now();
+    current_hour = now.hour();
+    current_minute = now.minute();  
+    int day_of_week_in_real_time = now.dayOfTheWeek();
+    current_day = (day_of_week_in_real_time == 0) ? 6 : day_of_week_in_real_time - 1;   
 
     float vazao_lag_15m = vazao_history[(history_index - 15 + HISTORY_SIZE) % HISTORY_SIZE];
     float vazao_lag_1h = vazao_history[(history_index - 60 + HISTORY_SIZE) % HISTORY_SIZE];
