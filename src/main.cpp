@@ -16,7 +16,7 @@ unsigned long beforeTimer = 0;
 unsigned long lastWaterFlow = 0;  // Tempo da última detecção de fluxo
 const float METRIC_FLOW = 450;
 const unsigned long NO_WATER_THRESHOLD = 60000; // 1 minuto (o ideal seria mais tempo, mas coloquei 1 minuto pra testar) sem fluxo = possível falta de água
-bool waterShortageAlerted = false;  // Controle para não repetir alerta
+bool waterShortageAlerted = false;  
 
 void IRAM_ATTR inpulse() {
   contPulse++;
@@ -37,7 +37,7 @@ int history_index = 0;
 
 int current_hour = 0;
 int current_minute = 0;
-int current_day = 0; // 0=Domingo, 1=Segunda, etc.
+int current_day = 0; 
 
 const float X_min[5] = {0., 0., 0., 0., 0.};
 const float X_scale[5] = {0.04347826, 0.16666667, 0.03798632, 0.03798632, 0.03798632};
@@ -47,7 +47,12 @@ const float y_scale = 0.03798632;
 // Variáveis para simular hidrômetro 
 float volume_real = 0.0;      
 float volume_hidrometro = 0.0; 
-float erro_hidrometro = 0.0;   
+float erro_hidrometro = 0.0;     
+
+float menorVazaoRegistrada = 9999.0;
+int horaMenorVazao = 0;
+int minutoMenorVazao = 0;
+int diaMenorVazao = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -94,7 +99,14 @@ void loop() {
     noInterrupts(); 
     countCurrent = contPulse;
     contPulse = 0;
-    interrupts();  
+    interrupts();    
+
+    DateTime now = rtc.now();
+    current_hour = now.hour();
+    current_minute = now.minute();
+    int day_of_week_in_real_time = now.dayOfTheWeek(); // 0=Domingo, 1=Segunda ...
+    // Ajuste para o padrão do modelo (0=Segunda, 6=Domingo)
+    current_day = (day_of_week_in_real_time == 0) ? 6 : day_of_week_in_real_time - 1;
 
     float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0; // L/min
 
@@ -128,6 +140,26 @@ void loop() {
       volume_hidrometro = 0;
     }
 
+
+      menorVazaoRegistrada = current_flow;
+      horaMenorVazao = current_hour;
+      minutoMenorVazao = current_minute;
+      diaMenorVazao = current_day;
+
+      Serial.println("******************************************");
+      Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
+      Serial.print("Valor: ");
+      Serial.print(menorVazaoRegistrada, 2);
+      Serial.println(" L/min");
+      Serial.print("(Ocorrido no dia ");
+      Serial.print(diaMenorVazao);
+      Serial.print(" às ");
+      Serial.print(horaMenorVazao);
+      Serial.print(":");
+      if (minutoMenorVazao < 10) Serial.print("0");
+      Serial.println(minutoMenorVazao);
+      Serial.println("******************************************");
+
     // Verifica discrepância entre medidor real e hidrômetro
     float diferenca = fabs(volume_real - volume_hidrometro);
     float porcentagem_dif = (volume_real > 0) ? (diferenca / volume_real) * 100.0 : 0;
@@ -150,12 +182,6 @@ void loop() {
       Serial.println("Hidrômetro condizente com a medição real.");
     }
 
-    // Atualização do histórico para previsão 
-    DateTime now = rtc.now();
-    current_hour = now.hour();
-    current_minute = now.minute();  
-    int day_of_week_in_real_time = now.dayOfTheWeek();
-    current_day = (day_of_week_in_real_time == 0) ? 6 : day_of_week_in_real_time - 1;   
 
     float vazao_lag_15m = vazao_history[(history_index - 15 + HISTORY_SIZE) % HISTORY_SIZE];
     float vazao_lag_1h = vazao_history[(history_index - 60 + HISTORY_SIZE) % HISTORY_SIZE];
@@ -189,7 +215,7 @@ void loop() {
     vazao_history[history_index] = current_flow;
     history_index = (history_index + 1) % HISTORY_SIZE; 
     
-    dataFile = SD.open("/vazao.csv", FILE_APPEND);
+/*    dataFile = SD.open("/vazao.csv", FILE_APPEND);
     if (dataFile) {
       dataFile.print(current_day);
       dataFile.print(",");
@@ -199,7 +225,7 @@ void loop() {
       dataFile.print(",");
       dataFile.println(current_flow, 2);
       dataFile.close();
-    }
+    }*/
     beforeTimer = millis(); 
   }
 }
