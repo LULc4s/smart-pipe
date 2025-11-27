@@ -6,14 +6,8 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 #include <Wire.h>             
 #include <RTClib.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
-
 
 #include "modelo_vazao.h"
-
-void conectaWiFi();
-void enviarDados(float fluxo, float volume_real, float volume_hidrometro, int dia, int hora, int minuto);
 
 RTC_DS3231 rtc;
 
@@ -50,7 +44,7 @@ const float X_scale[5] = {0.04347826, 0.16666667, 0.03798632, 0.03798632, 0.0379
 const float y_min = 0.0;
 const float y_scale = 0.03798632;
 
-
+// Variáveis para simular hidrômetro 
 float volume_real = 0.0;      
 float volume_hidrometro = 0.0; 
 float erro_hidrometro = 0.0;     
@@ -60,24 +54,8 @@ int horaMenorVazao = 0;
 int minutoMenorVazao = 0;
 int diaMenorVazao = 0;
 
-const char* ssid = "NOME_DO_WIFI";
-const char* password = "SENHA_DO_WIFI";
-
-void conectaWiFi() {
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando ao WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi conectado!");
-}
-
 void setup() {
-
   Serial.begin(115200);
-  delay(500);
-  conectaWiFi();
 
   if (!rtc.begin()) {
     Serial.println("ERRO: Não foi possível encontrar o RTC!");
@@ -113,7 +91,6 @@ void setup() {
   
   Serial.println("Modelo de predição carregado. Sistema pronto!");
 }
-
 
 void loop() {
   if (millis() - beforeTimer >= 1000) {
@@ -199,7 +176,19 @@ void loop() {
     Serial.print(porcentagem_dif, 2);
     Serial.println(" %");
 
-    enviarDados(current_flow, volume_real, volume_hidrometro, current_day, current_hour, current_minute);
+    // Cria uma cópia da quantidade pulsos
+    int copiaPulse;
+      
+    // Gera um interrupção pois o contador de pulsos é uma variável volátil
+    // E faz a cópia do valor
+    noInterrupts(); 
+    copiaPulse = contPulse; 
+    interrupts(); 
+    float volume_total = copiaPulse / METRIC_FLOW;
+    
+    Serial.print("Volume total do (sensor): ");
+    Serial.print(volume_total, 3);
+    Serial.println(" L");
 
     if (porcentagem_dif > 10.0) {
       Serial.println("ALERTA: Medidor da residência pode estar impreciso!");
@@ -239,39 +228,18 @@ void loop() {
 
     vazao_history[history_index] = current_flow;
     history_index = (history_index + 1) % HISTORY_SIZE; 
+    
+/*    dataFile = SD.open("/vazao.csv", FILE_APPEND);
+    if (dataFile) {
+      dataFile.print(current_day);
+      dataFile.print(",");
+      dataFile.print(current_hour);
+      dataFile.print(",");
+      dataFile.print(current_minute);
+      dataFile.print(",");
+      dataFile.println(current_flow, 2);
+      dataFile.close();
+    }*/
     beforeTimer = millis(); 
   }
-}
-
-// ENVIO AO NGROK
-
-String serverURL = "https://SEU-ENDERECO.ngrok-free.app/receber";
-
-void enviarDados(float fluxo, float volume_real, float volume_hidrometro,
-                 int dia, int hora, int minuto) {
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi desconectado, tentando reconectar...");
-    conectaWiFi();
-  }
-
-  HTTPClient http;
-  http.begin(serverURL);
-  http.addHeader("Content-Type", "application/json");
-
-  String json = "{";
-  json += "\"fluxo\":" + String(fluxo, 2) + ",";
-  json += "\"volume_real\":" + String(volume_real, 3) + ",";
-  json += "\"volume_hidrometro\":" + String(volume_hidrometro, 3) + ",";
-  json += "\"dia\":" + String(dia) + ",";
-  json += "\"hora\":" + String(hora) + ",";
-  json += "\"minuto\":" + String(minuto);
-  json += "}";
-
-  int codigo = http.POST(json);
-
-  Serial.print("Enviado ao servidor. Código HTTP: ");
-  Serial.println(codigo);
-
-  http.end();
 }
