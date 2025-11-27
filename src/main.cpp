@@ -47,7 +47,10 @@ const float y_scale = 0.03798632;
 // Variáveis para simular hidrômetro 
 float volume_real = 0.0;      
 float volume_hidrometro = 0.0; 
-float erro_hidrometro = 0.0;     
+float erro_hidrometro = 0.0;    
+
+// Variavel do valor real de volueme total
+float volume_total = 0.0;
 
 float menorVazaoRegistrada = 9999.0;
 int horaMenorVazao = 0;
@@ -176,6 +179,20 @@ void loop() {
     Serial.print(porcentagem_dif, 2);
     Serial.println(" %");
 
+    // Cria uma cópia da quantidade pulsos
+    int copiaPulse;
+      
+    // Gera um interrupção pois o contador de pulsos é uma variável volátil
+    // E faz a cópia do valor
+    noInterrupts(); 
+    copiaPulse = contPulse; 
+    interrupts(); 
+    volume_total = (copiaPulse / METRIC_FLOW) + volume_total;
+    
+    Serial.print("Volume total do (sensor): ");
+    Serial.print(volume_total, 3);
+    Serial.println(" L");
+
     if (porcentagem_dif > 10.0) {
       Serial.println("ALERTA: Medidor da residência pode estar impreciso!");
     } else {
@@ -229,3 +246,4 @@ void loop() {
     beforeTimer = millis(); 
   }
 }
+
