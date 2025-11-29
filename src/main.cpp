@@ -6,8 +6,64 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 #include <Wire.h>             
 #include <RTClib.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
 
 #include "modelo_vazao.h"
+
+// CONFIGURAÇÕES
+
+const char* ssid = ""; //nome_da_rede_wifi
+const char* password = ""; //senha_da_rede_wifi
+
+// IP do PC rodando Mosquitto
+const char* mqtt_server = "";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+// Conecta ao WiFi
+
+void setupWifi() {
+  Serial.println("");
+  Serial.print("Conectando ao WiFi: ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi conectado!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+// Reconecta ao broker MQTT
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Conectando ao Mosquitto... ");
+
+    if (client.connect("ESP32_Client")) {
+      Serial.println("Conectado!");
+
+      // Envia "hello world"
+      client.publish("test/topictest/topic", "hello world");
+      Serial.println("hello world enviado!");
+    } 
+    else {
+      Serial.print("Falhou rc=");
+      Serial.println(client.state());
+      Serial.println("");
+      Serial.println("Tentando de novo em 3s...");
+      delay(3000);
+    }
+  }
+}
 
 RTC_DS3231 rtc;
 
@@ -47,7 +103,10 @@ const float y_scale = 0.03798632;
 // Variáveis para simular hidrômetro 
 float volume_real = 0.0;      
 float volume_hidrometro = 0.0; 
-float erro_hidrometro = 0.0;     
+float erro_hidrometro = 0.0;    
+
+// Variavel do valor real de volueme total
+float volume_total = 0.0;
 
 float menorVazaoRegistrada = 9999.0;
 int horaMenorVazao = 0;
@@ -56,6 +115,10 @@ int diaMenorVazao = 0;
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
+
+  setupWifi();
+  client.setServer(mqtt_server, 1883);
 
   if (!rtc.begin()) {
     Serial.println("ERRO: Não foi possível encontrar o RTC!");
@@ -93,6 +156,12 @@ void setup() {
 }
 
 void loop() {
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
   if (millis() - beforeTimer >= 1000) {
     
     int countCurrent = 0;
@@ -175,6 +244,20 @@ void loop() {
     Serial.print("Diferença percentual: ");
     Serial.print(porcentagem_dif, 2);
     Serial.println(" %");
+
+    // Cria uma cópia da quantidade pulsos
+    int copiaPulse;
+      
+    // Gera um interrupção pois o contador de pulsos é uma variável volátil
+    // E faz a cópia do valor
+    noInterrupts(); 
+    copiaPulse = contPulse; 
+    interrupts(); 
+    volume_total = (copiaPulse / METRIC_FLOW) + volume_total;
+    
+    Serial.print("Volume total do (sensor): ");
+    Serial.print(volume_total, 3);
+    Serial.println(" L");
 
     if (porcentagem_dif > 10.0) {
       Serial.println("ALERTA: Medidor da residência pode estar impreciso!");
