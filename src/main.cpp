@@ -11,6 +11,7 @@
 
 #include "modelo_vazao.h"
 
+
 // CONFIGURAÇÕES
 
 const char* ssid = ""; //nome_da_rede_wifi
@@ -111,7 +112,8 @@ float volume_total = 0.0;
 float menorVazaoRegistrada = 9999.0;
 int horaMenorVazao = 0;
 int minutoMenorVazao = 0;
-int diaMenorVazao = 0;
+int diaMenorVazao = 0; 
+String registroVazao = "";
 
 void setup() {
   Serial.begin(115200);
@@ -192,42 +194,74 @@ void loop() {
             Serial.println("!!!ALERTA!!!\n");
             waterShortageAlerted = true;  // Evita repetição do alerta
         }
-    }
+    } 
 
-    Serial.println("\n-------------------------------------------");
-    Serial.print("VAZÃO MEDIDA ATUALMENTE: ");
-    Serial.print(current_flow, 2);
-    Serial.println(" L/min");
+    if (millis() - beforeTimer >= 1000) {
+      
+      float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0;
+      Serial.println("\n-------------------------------------------");
+      Serial.print("VAZÃO MEDIDA ATUALMENTE: ");
+      Serial.print(current_flow, 2);
+      Serial.println(" L/min");
 
     // Atualiza volumes 
-    if (current_flow > 0.01) {  // considera fluxo mínimo para evitar ruídos
-      volume_real += current_flow / 60.0; // L/min -> L/segundo (1s de loop)
-      erro_hidrometro = random(-5, 6) / 100.0; // erro ±5%
-      volume_hidrometro = volume_real * (1.0 + erro_hidrometro);
-    } else {
-      volume_real = 0;
-      volume_hidrometro = 0;
-    }
+      if (current_flow > 0.01) {  // considera fluxo mínimo para evitar ruídos
+        volume_real += current_flow / 60.0; // L/min -> L/segundo (1s de loop)
+        erro_hidrometro = random(-5, 6) / 100.0; // erro ±5%
+        volume_hidrometro = volume_real * (1.0 + erro_hidrometro);
+      } else {
+        volume_real = 0;
+        volume_hidrometro = 0;
+      }
 
+      if(current_flow < volume_real / 2){  
+        menorVazaoRegistrada = current_flow;
+        horaMenorVazao = current_hour;
+        minutoMenorVazao = current_minute;
+        diaMenorVazao = current_day;  
+        registroVazao = "VAZÃO BAIXA REGISTRADA"; 
+        Serial.println("Vazão acumulada: "); 
+        Serial.print(volume_real, 3);
+        Serial.println(registroVazao);
+        Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
+        Serial.print("Valor: ");
+        Serial.print(menorVazaoRegistrada, 2);
+        Serial.println(" L/min");
+        Serial.print("(Ocorrido no dia ");
+        Serial.print(diaMenorVazao);
+        Serial.print(" às ");
+        Serial.print(horaMenorVazao);
+        Serial.print(":");
+        if (minutoMenorVazao < 10) Serial.print("0");
+        Serial.println(minutoMenorVazao);
+        Serial.println("******************************************");
+      } else if(current_flow < volume_real / 4){  
+        menorVazaoRegistrada = current_flow;
+        horaMenorVazao = current_hour;
+        minutoMenorVazao = current_minute;
+        diaMenorVazao = current_day;  
+        registroVazao = "POSSÍVEL FALTA DE ÁGUA NA TUBULAÇÃO";
+        Serial.println("Vazão acumulada: "); 
+        Serial.print(volume_real, 3);
+        Serial.println(registroVazao);
+        Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
+        Serial.print("Valor: ");
+        Serial.print(menorVazaoRegistrada, 2);
+        Serial.println(" L/min");
+        Serial.print("(Ocorrido no dia ");
+        Serial.print(diaMenorVazao);
+        Serial.print(" às ");
+        Serial.print(horaMenorVazao);
+        Serial.print(":");
+        if (minutoMenorVazao < 10) Serial.print("0");
+        Serial.println(minutoMenorVazao);
+        Serial.println("******************************************");
+      }  
 
-      menorVazaoRegistrada = current_flow;
-      horaMenorVazao = current_hour;
-      minutoMenorVazao = current_minute;
-      diaMenorVazao = current_day;
-
-      Serial.println("******************************************");
-      Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
-      Serial.print("Valor: ");
-      Serial.print(menorVazaoRegistrada, 2);
-      Serial.println(" L/min");
-      Serial.print("(Ocorrido no dia ");
-      Serial.print(diaMenorVazao);
-      Serial.print(" às ");
-      Serial.print(horaMenorVazao);
-      Serial.print(":");
-      if (minutoMenorVazao < 10) Serial.print("0");
-      Serial.println(minutoMenorVazao);
-      Serial.println("******************************************");
+      registroVazao = "VAZÃO NORMAL";
+       Serial.println("Vazão acumulada: "); 
+        Serial.print(volume_real, 3);
+        Serial.println(registroVazao);
 
     // Verifica discrepância entre medidor real e hidrômetro
     float diferenca = fabs(volume_real - volume_hidrometro);
@@ -310,5 +344,7 @@ void loop() {
       dataFile.close();
     }*/
     beforeTimer = millis(); 
+  } 
+  beforeTimer = millis(); 
   }
 }
