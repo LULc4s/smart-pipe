@@ -11,74 +11,26 @@
 
 #include "modelo_vazao.h"
 
-
-// CONFIGURAÇÕES
-
-const char* ssid = ""; //nome_da_rede_wifi
-const char* password = ""; //senha_da_rede_wifi
-
-// IP do PC rodando Mosquitto
-const char* mqtt_server = "";
+// --- CONFIGURAÇÕES WIFI E MQTT ---
+const char* ssid = "brisa-4067358"; 
+const char* password = "tuka6mku"; 
+const char* mqtt_server = "192.168.0.3";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Conecta ao WiFi
-
-void setupWifi() {
-  Serial.println("");
-  Serial.print("Conectando ao WiFi: ");
-  Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi conectado!");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-}
-
-// Reconecta ao broker MQTT
-
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Conectando ao Mosquitto... ");
-
-    if (client.connect("ESP32_Client")) {
-      Serial.println("Conectado!");
-
-      // Envia "hello world"
-      client.publish("test/topictest/topic", "hello world");
-      Serial.println("hello world enviado!");
-    } 
-    else {
-      Serial.print("Falhou rc=");
-      Serial.println(client.state());
-      Serial.println("");
-      Serial.println("Tentando de novo em 3s...");
-      delay(3000);
-    }
-  }
-}
-
+// --- OBJETOS GLOBAIS ---
 RTC_DS3231 rtc;
 
+// --- VARIÁVEIS DE FLUXO ---
 volatile int contPulse = 0;
 unsigned long beforeTimer = 0;
-unsigned long lastWaterFlow = 0;  // Tempo da última detecção de fluxo
-const float METRIC_FLOW = 450;
-const unsigned long NO_WATER_THRESHOLD = 60000; // 1 minuto (o ideal seria mais tempo, mas coloquei 1 minuto pra testar) sem fluxo = possível falta de água
+unsigned long lastWaterFlow = 0; 
+const float METRIC_FLOW = 450; 
+const unsigned long NO_WATER_THRESHOLD = 60000; 
 bool waterShortageAlerted = false;  
 
-void IRAM_ATTR inpulse() {
-  contPulse++;
-}
-
+// --- VARIÁVEIS DO MODELO TFLITE ---
 tflite::ErrorReporter* error_reporter = nullptr;
 const tflite::Model* model = nullptr;
 tflite::MicroInterpreter* interpreter = nullptr;
@@ -88,51 +40,100 @@ TfLiteTensor* output = nullptr;
 constexpr int kTensorArenaSize = 5 * 1024;
 uint8_t tensor_arena[kTensorArenaSize];
 
-const int HISTORY_SIZE = 96; 
-float vazao_history[HISTORY_SIZE] = {0.0};
-int history_index = 0;
+// --- NORMALIZAÇÃO (VALORES DO DATASET JÁ INCLUÍDOS) ---
+// Baseado nas premissas:
+// Hora (0-23), Dia (0-6), Vazão Max (~25 L/min), Volume Max Dia (~9000 L)
+// Fórmula: Scale = 1.0 / (Max - Min)
 
+const float X_min[4] =   {0.0, 0.0, 0.0, 0.0}; 
+
+const float X_scale[4] = {
+    0.043478,  // Hora: 1/23
+    0.166667,  // Dia: 1/6
+    0.040000,  // Vazão Atual: 1/25 (Considerando pico máx de 25 L/min)
+    0.000111   // Volume Acumulado: 1/9000 (Considerando consumo máx dia de 9000L)
+}; 
+
+// Normalização do Alvo (Saída - Vazão Futura)
+const float y_min = 0.0;
+const float y_scale = 0.040000; // Mesma escala da Vazão Atual
+
+// --- VARIÁVEIS DE ESTADO E ACUMULADORES ---
 int current_hour = 0;
 int current_minute = 0;
 int current_day = 0; 
 
-const float X_min[5] = {0., 0., 0., 0., 0.};
-const float X_scale[5] = {0.04347826, 0.16666667, 0.03798632, 0.03798632, 0.03798632};
-const float y_min = 0.0;
-const float y_scale = 0.03798632;
+// Volumes
+float volume_acumulado_dia = 0.0; // Zera à meia noite
+float volume_total = 0.0;         // Nunca zera
 
-// Variáveis para simular hidrômetro 
-float volume_real = 0.0;      
+// Simulação Hidrômetro
 float volume_hidrometro = 0.0; 
 float erro_hidrometro = 0.0;    
 
-// Variavel do valor real de volueme total
-float volume_total = 0.0;
-
+// Rastreamento de Menor Vazão
 float menorVazaoRegistrada = 9999.0;
 int horaMenorVazao = 0;
 int minutoMenorVazao = 0;
 int diaMenorVazao = 0; 
-String registroVazao = "";
+
+// Interrupção
+void IRAM_ATTR inpulse() {
+  contPulse++;
+}
+
+// --- FUNÇÕES AUXILIARES ---
+
+void setupWifi() {
+  delay(10);
+  Serial.println();
+  Serial.print("Conectando ao WiFi: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi conectado!");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Conectando ao Mosquitto... ");
+    if (client.connect("ESP32_Client_Vazao")) {
+      Serial.println("Conectado!");
+      client.publish("status/esp32", "Online e Monitorando");
+    } else {
+      Serial.print("Falhou rc=");
+      Serial.print(client.state());
+      Serial.println(" Tentando em 3s...");
+      delay(3000);
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  setupWifi();
-  client.setServer(mqtt_server, 1883);
-
+  // Inicializa Hardware
   if (!rtc.begin()) {
-    Serial.println("ERRO: Não foi possível encontrar o RTC!");
-    Serial.println("Verifique a conexão nos pinos SDA(21) e SCL(22).");
-    while (1) delay(10); // Trava o código aqui se o RTC falhar
+    Serial.println("ERRO: RTC não encontrado!");
+    while (1) delay(10); 
   }
-  Serial.println("RTC DS3231 inicializado.");
+  Serial.println("RTC OK.");
 
   pinMode(15, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(15), inpulse, FALLING);
-  Serial.println("Sensor de vazão configurado.");
+  Serial.println("Sensor OK.");
 
+  // Inicializa WiFi/MQTT
+  setupWifi();
+  client.setServer(mqtt_server, 1883);
+
+  // Inicializa TFLite
   static tflite::MicroErrorReporter micro_error_reporter;
   error_reporter = &micro_error_reporter;
 
@@ -154,197 +155,127 @@ void setup() {
   input = interpreter->input(0);
   output = interpreter->output(0);
   
-  Serial.println("Modelo de predição carregado. Sistema pronto!");
+  Serial.println("Modelo (4 inputs) carregado com parametros atualizados. Sistema pronto!");
 }
 
 void loop() {
-
+  // Mantém MQTT conectado
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
+  // Loop principal de 1 segundo
   if (millis() - beforeTimer >= 1000) {
     
+    // 1. ATUALIZAÇÃO DO TEMPO
+    DateTime now = rtc.now();
+    current_hour = now.hour();
+    current_minute = now.minute();
+    int day_week = now.dayOfTheWeek(); 
+    current_day = (day_week == 0) ? 6 : day_week - 1; // Ajuste 0=Segunda
+
+    // Zera o volume acumulado do dia à meia-noite
+    if (current_hour == 0 && current_minute == 0 && now.second() < 2) {
+        volume_acumulado_dia = 0.0;
+        Serial.println("--- NOVO DIA: Volume Diário Resetado ---");
+    }
+
+    // 2. LEITURA DO SENSOR
     int countCurrent = 0;
     noInterrupts(); 
     countCurrent = contPulse;
     contPulse = 0;
     interrupts();    
 
-    DateTime now = rtc.now();
-    current_hour = now.hour();
-    current_minute = now.minute();
-    int day_of_week_in_real_time = now.dayOfTheWeek(); // 0=Domingo, 1=Segunda ...
-    // Ajuste para o padrão do modelo (0=Segunda, 6=Domingo)
-    current_day = (day_of_week_in_real_time == 0) ? 6 : day_of_week_in_real_time - 1;
+    // Cálculo da vazão instantânea (L/min)
+    float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0;
+    
+    // Cálculo do volume passado neste segundo (L)
+    float volume_neste_segundo = current_flow / 60.0;
 
-    float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0; // L/min
+    // Atualiza acumuladores
+    volume_total += volume_neste_segundo;
+    volume_acumulado_dia += volume_neste_segundo;
 
-    // Verifica se há fluxo de água
+    // 3. MONITORAMENTO E ALERTAS
+    Serial.println("\n-------------------------------------------");
+    Serial.print("Hora: "); Serial.print(current_hour); Serial.print(":"); Serial.println(current_minute);
+    Serial.print("Vazão Instantânea: "); Serial.print(current_flow, 2); Serial.println(" L/min");
+    Serial.print("Volume Acumulado Hoje: "); Serial.print(volume_acumulado_dia, 3); Serial.println(" L");
+
+    // Alerta de Falta de Água
     if (current_flow > 0.01) {
         lastWaterFlow = millis();
-        waterShortageAlerted = false;  // Reseta o alerta quando detecta fluxo
+        waterShortageAlerted = false;
     } else {
-        // Verifica se passou do tempo limite sem fluxo
         if (!waterShortageAlerted && (millis() - lastWaterFlow) > NO_WATER_THRESHOLD) {
-            Serial.println("\n!!!ALERTA!!!");
-            Serial.println("POSSÍVEL FALTA DE ÁGUA DETECTADA!");
-            Serial.println("Nenhum fluxo detectado no último minuto."); // Em um mundo real, seria ideal um tempo maior, como 12 hora
-            Serial.println("!!!ALERTA!!!\n");
-            waterShortageAlerted = true;  // Evita repetição do alerta
+            Serial.println("\n!!! ALERTA: POSSÍVEL FALTA DE ÁGUA !!!");
+            client.publish("alerta/agua", "Falta de agua detectada");
+            waterShortageAlerted = true;
         }
-    } 
-
-    if (millis() - beforeTimer >= 1000) {
-      
-      float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0;
-      Serial.println("\n-------------------------------------------");
-      Serial.print("VAZÃO MEDIDA ATUALMENTE: ");
-      Serial.print(current_flow, 2);
-      Serial.println(" L/min");
-
-    // Atualiza volumes 
-      if (current_flow > 0.01) {  // considera fluxo mínimo para evitar ruídos
-        volume_real += current_flow / 60.0; // L/min -> L/segundo (1s de loop)
-        erro_hidrometro = random(-5, 6) / 100.0; // erro ±5%
-        volume_hidrometro = volume_real * (1.0 + erro_hidrometro);
-      } else {
-        volume_real = 0;
-        volume_hidrometro = 0;
-      }
-
-      if(current_flow < volume_real / 2){  
-        menorVazaoRegistrada = current_flow;
-        horaMenorVazao = current_hour;
-        minutoMenorVazao = current_minute;
-        diaMenorVazao = current_day;  
-        registroVazao = "VAZÃO BAIXA REGISTRADA"; 
-        Serial.println("Vazão acumulada: "); 
-        Serial.print(volume_real, 3);
-        Serial.println(registroVazao);
-        Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
-        Serial.print("Valor: ");
-        Serial.print(menorVazaoRegistrada, 2);
-        Serial.println(" L/min");
-        Serial.print("(Ocorrido no dia ");
-        Serial.print(diaMenorVazao);
-        Serial.print(" às ");
-        Serial.print(horaMenorVazao);
-        Serial.print(":");
-        if (minutoMenorVazao < 10) Serial.print("0");
-        Serial.println(minutoMenorVazao);
-        Serial.println("******************************************");
-      } else if(current_flow < volume_real / 4){  
-        menorVazaoRegistrada = current_flow;
-        horaMenorVazao = current_hour;
-        minutoMenorVazao = current_minute;
-        diaMenorVazao = current_day;  
-        registroVazao = "POSSÍVEL FALTA DE ÁGUA NA TUBULAÇÃO";
-        Serial.println("Vazão acumulada: "); 
-        Serial.print(volume_real, 3);
-        Serial.println(registroVazao);
-        Serial.println("!!! NOVO RECORDE DE VAZÃO MÍNIMA !!!");
-        Serial.print("Valor: ");
-        Serial.print(menorVazaoRegistrada, 2);
-        Serial.println(" L/min");
-        Serial.print("(Ocorrido no dia ");
-        Serial.print(diaMenorVazao);
-        Serial.print(" às ");
-        Serial.print(horaMenorVazao);
-        Serial.print(":");
-        if (minutoMenorVazao < 10) Serial.print("0");
-        Serial.println(minutoMenorVazao);
-        Serial.println("******************************************");
-      }  
-
-      registroVazao = "VAZÃO NORMAL";
-       Serial.println("Vazão acumulada: "); 
-        Serial.print(volume_real, 3);
-        Serial.println(registroVazao);
-
-    // Verifica discrepância entre medidor real e hidrômetro
-    float diferenca = fabs(volume_real - volume_hidrometro);
-    float porcentagem_dif = (volume_real > 0) ? (diferenca / volume_real) * 100.0 : 0;
-
-    Serial.print("Volume real (sensor): ");
-    Serial.print(volume_real, 3);
-    Serial.println(" L");
-
-    Serial.print("Volume hidrômetro (simulado): ");
-    Serial.print(volume_hidrometro, 3);
-    Serial.println(" L");
-
-    Serial.print("Diferença percentual: ");
-    Serial.print(porcentagem_dif, 2);
-    Serial.println(" %");
-
-    // Cria uma cópia da quantidade pulsos
-    int copiaPulse;
-      
-    // Gera um interrupção pois o contador de pulsos é uma variável volátil
-    // E faz a cópia do valor
-    noInterrupts(); 
-    copiaPulse = contPulse; 
-    interrupts(); 
-    volume_total = (copiaPulse / METRIC_FLOW) + volume_total;
-    
-    Serial.print("Volume total do (sensor): ");
-    Serial.print(volume_total, 3);
-    Serial.println(" L");
-
-    if (porcentagem_dif > 10.0) {
-      Serial.println("ALERTA: Medidor da residência pode estar impreciso!");
-    } else {
-      Serial.println("Hidrômetro condizente com a medição real.");
     }
 
+    // Registro de Vazão Mínima (ignora zero)
+    if (current_flow > 0.01 && current_flow < menorVazaoRegistrada) {
+        menorVazaoRegistrada = current_flow;
+        horaMenorVazao = current_hour;
+        minutoMenorVazao = current_minute;
+        diaMenorVazao = current_day;
+        
+        Serial.println("*** NOVO RECORDE DE VAZÃO MÍNIMA ***");
+        Serial.print("Valor: "); Serial.println(menorVazaoRegistrada);
+    }
 
-    float vazao_lag_15m = vazao_history[(history_index - 15 + HISTORY_SIZE) % HISTORY_SIZE];
-    float vazao_lag_1h = vazao_history[(history_index - 60 + HISTORY_SIZE) % HISTORY_SIZE];
-    float vazao_lag_24h = vazao_history[history_index]; 
+    // Simulação e Comparação de Hidrômetro
+    if (current_flow > 0.01) {
+        erro_hidrometro = random(-5, 6) / 100.0; 
+        volume_hidrometro += volume_neste_segundo * (1.0 + erro_hidrometro);
+    }
     
-    float features[5] = {
+    // Comparação Volume Real vs Hidrômetro (usando volume total)
+    float diferenca = fabs(volume_total - volume_hidrometro);
+    float porcentagem_dif = (volume_total > 0) ? (diferenca / volume_total) * 100.0 : 0;
+    
+    if (porcentagem_dif > 10.0) {
+        Serial.println("ALERTA: Divergência alta no hidrômetro!");
+    }
+
+    // 4. PREPARAÇÃO PARA REDE NEURAL (TFLITE)
+    // O modelo agora espera 4 valores: [Hora, Dia, Vazão Atual, Volume Dia]
+    float features[4] = {
       (float)current_hour,
       (float)current_day,
-      vazao_lag_15m,
-      vazao_lag_1h,
-      vazao_lag_24h
+      current_flow,
+      volume_acumulado_dia
     };
 
-    for (int i = 0; i < 5; i++) {
+    // Normalização usando os valores calculados
+    for (int i = 0; i < 4; i++) {
         input->data.f[i] = (features[i] - X_min[i]) * X_scale[i];
     }
     
+    // 5. INFERÊNCIA (PREVISÃO)
     if (interpreter->Invoke() != kTfLiteOk) {
         error_reporter->Report("A inferência falhou.");
-        return;
+    } else {
+        float predicted_scaled = output->data.f[0];
+        // Desnormalização da saída
+        float predicted_real = (predicted_scaled / y_scale) + y_min;
+
+        Serial.print("PREVISÃO (próx 15m): ");
+        Serial.print(predicted_real, 2);
+        Serial.println(" L/min");
+        
+        // Enviar previsão via MQTT
+        char msg[10];
+        dtostrf(predicted_real, 4, 2, msg);
+        client.publish("sensor/previsao", msg);
     }
 
-    float predicted_scaled = output->data.f[0];
-    float predicted_real = (predicted_scaled / y_scale) + y_min;
-
-    Serial.print("PREVISÃO PARA O PRÓXIMO PERÍODO: ");
-    Serial.print(predicted_real, 2);
-    Serial.println(" L/min");
     Serial.println("-------------------------------------------");
 
-    vazao_history[history_index] = current_flow;
-    history_index = (history_index + 1) % HISTORY_SIZE; 
-    
-/*    dataFile = SD.open("/vazao.csv", FILE_APPEND);
-    if (dataFile) {
-      dataFile.print(current_day);
-      dataFile.print(",");
-      dataFile.print(current_hour);
-      dataFile.print(",");
-      dataFile.print(current_minute);
-      dataFile.print(",");
-      dataFile.println(current_flow, 2);
-      dataFile.close();
-    }*/
+    // Reset do timer do loop
     beforeTimer = millis(); 
-  } 
-  beforeTimer = millis(); 
   }
 }
