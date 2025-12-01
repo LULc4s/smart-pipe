@@ -16,6 +16,9 @@ const char* ssid = "brisa-4067358";
 const char* password = "tuka6mku"; 
 const char* mqtt_server = "192.168.0.3";
 
+// Variavel que eviara os dados do sensor
+char msg_dados_enviados[60];   // Buffer da mensagem que será enviada via MQTT
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -274,7 +277,19 @@ void loop() {
     }
 
     Serial.println("-------------------------------------------");
-
+   
+    // Testar se ocasiona atraso na próxima leitura do sensor
+    // Caso haja incompatibilidade de dados, gerar uma interrupção:
+    // Limpa o buffer ANTES de montar a nova mensagem
+    memset(msg_dados_enviados, 0, sizeof(msg_dados_enviados));
+    // Monta a mensagem no formato desejado
+    snprintf(msg_dados_enviados, sizeof(msg_dados_enviados), "%.3f,%.3f,%.3f", current_flow, volume_hidrometro, volume_total);
+    // Publica com QoS 1 (garante entrega ao menos uma vez)
+    
+    // Consertar conversão de tipo para publicação MQTT
+    const uint8_t* msg_dados_enviados_ptr = reinterpret_cast<const uint8_t*>(msg_dados_enviados);
+    client.publish("volume_real/volume_hidrometro/volume_total", msg_dados_enviados_ptr,strlen(msg_dados_enviados_ptr), true, 1);  
+    
     // Reset do timer do loop
     beforeTimer = millis(); 
   }

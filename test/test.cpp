@@ -13,7 +13,7 @@
 
 
 // CONFIGURAÇÕES
-char msg[50];   // Buffer da mensagem que será enviada via MQTT
+char msg_dados_recebidos[100];   // Buffer da mensagem que será enviada via MQTT
 const char* ssid = ""; //nome_da_rede_wifi
 const char* password = ""; //senha_da_rede_wifi
 
