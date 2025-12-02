@@ -4,7 +4,7 @@ from datetime import datetime
 
 BROKER = "localhost"     # ou IP do seu broker
 PORT = 1883
-TOPIC = "dados/sensor"
+TOPIC = "volume_real/volume_hidrometro/volume_acumulado_dia"
 
 CSV_FILE = "dados_recebidos.csv"
 

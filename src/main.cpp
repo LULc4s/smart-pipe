@@ -192,19 +192,17 @@ void loop() {
     interrupts();    
 
     // Cálculo da vazão instantânea (L/min)
-    float current_flow = ((float)countCurrent / METRIC_FLOW) * 60.0;
+    float current_flow = ((float)countCurrent / METRIC_FLOW);
     
     // Cálculo do volume passado neste segundo (L)
-    float volume_neste_segundo = current_flow / 60.0;
 
     // Atualiza acumuladores
-    volume_total += volume_neste_segundo;
-    volume_acumulado_dia += volume_neste_segundo;
+    volume_acumulado_dia += current_flow;
 
     // 3. MONITORAMENTO E ALERTAS
-    Serial.println("\n-------------------------------------------");
+    Serial.println("-------------------------------------------");
     Serial.print("Hora: "); Serial.print(current_hour); Serial.print(":"); Serial.println(current_minute);
-    Serial.print("Vazão Instantânea: "); Serial.print(current_flow, 2); Serial.println(" L/min");
+    Serial.print("Vazão Instantânea: "); Serial.print(current_flow, 3); Serial.println(" L/min");
     Serial.print("Volume Acumulado Hoje: "); Serial.print(volume_acumulado_dia, 3); Serial.println(" L");
 
     // Alerta de Falta de Água
@@ -213,7 +211,7 @@ void loop() {
         waterShortageAlerted = false;
     } else {
         if (!waterShortageAlerted && (millis() - lastWaterFlow) > NO_WATER_THRESHOLD) {
-            Serial.println("\n!!! ALERTA: POSSÍVEL FALTA DE ÁGUA !!!");
+            Serial.println("!!! ALERTA: POSSÍVEL FALTA DE ÁGUA !!!");
             client.publish("alerta/agua", "Falta de agua detectada");
             waterShortageAlerted = true;
         }
@@ -233,7 +231,7 @@ void loop() {
     // Simulação e Comparação de Hidrômetro
     if (current_flow > 0.01) {
         erro_hidrometro = random(-5, 6) / 100.0; 
-        volume_hidrometro += volume_neste_segundo * (1.0 + erro_hidrometro);
+        volume_hidrometro += current_flow * (1.0 + erro_hidrometro);
     }
     
     // Comparação Volume Real vs Hidrômetro (usando volume total)
@@ -267,7 +265,7 @@ void loop() {
         float predicted_real = (predicted_scaled / y_scale) + y_min;
 
         Serial.print("PREVISÃO (próx 15m): ");
-        Serial.print(predicted_real, 2);
+        Serial.print(predicted_real, 3);
         Serial.println(" L/min");
         
         // Enviar previsão via MQTT
@@ -283,10 +281,10 @@ void loop() {
     // Limpa o buffer ANTES de montar a nova mensagem
     //memset(msg_dados_sensor, 0, sizeof(msg_dados_sensor));
     // Monta a mensagem no formato desejado
-    snprintf(msg_dados_sensor, sizeof(msg_dados_sensor), "%.3f,%.3f,%.3f", current_flow, volume_hidrometro, volume_total);
+    snprintf(msg_dados_sensor, sizeof(msg_dados_sensor), "%.3f,%.3f,%.3f", current_flow, volume_hidrometro, volume_acumulado_dia);
 
     // Publica com QoS 1 (garante entrega ao menos uma vez)
-    client.publish("volume_real/volume_hidrometro/volume_total", (uint8_t*)msg_dados_sensor, strlen(msg_dados_sensor), true);  
+    client.publish("volume_real/volume_hidrometro/volume_acumulado_dia", (uint8_t*)msg_dados_sensor, strlen(msg_dados_sensor), true);  
     
     // Reset do timer do loop
     beforeTimer = millis(); 
