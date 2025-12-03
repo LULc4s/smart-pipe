@@ -48,18 +48,12 @@ uint8_t tensor_arena[kTensorArenaSize];
 // Hora (0-23), Dia (0-6), Vazão Max (~25 L/min), Volume Max Dia (~9000 L)
 // Fórmula: Scale = 1.0 / (Max - Min)
 
-const float X_min[4] =   {0.0, 0.0, 0.0, 0.0}; 
+const float X_min[4] =   {0.000000, 0.000000, 0.000000, 0.000000 }; 
 
-const float X_scale[4] = {
-    0.043478,  // Hora: 1/23
-    0.166667,  // Dia: 1/6
-    0.040000,  // Vazão Atual: 1/25 (Considerando pico máx de 25 L/min)
-    0.000111   // Volume Acumulado: 1/9000 (Considerando consumo máx dia de 9000L)
-}; 
+const float X_scale[4] = {0.043478, 0.166667, 0.043168, 0.000092}; 
 
-// Normalização do Alvo (Saída - Vazão Futura)
 const float y_min = 0.0;
-const float y_scale = 0.040000; // Mesma escala da Vazão Atual
+const float y_scale = 0.043168; 
 
 // --- VARIÁVEIS DE ESTADO E ACUMULADORES ---
 int current_hour = 0;
