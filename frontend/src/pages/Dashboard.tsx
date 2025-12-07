@@ -27,7 +27,7 @@ const Dashboard = () => {
         const response = await fetch(`${API_URL}/api/dashboard`);
         if (!response.ok) throw new Error("Erro ao conectar com servidor");
 
-        const data = response.json();
+        const data = await response.json();
         setCurrentFlow(data.sensor.currentFlow);
         setTotalVolume(data.sensor.dailyVolume);
         setHydroVolume(data.sensor.hydroVolume);

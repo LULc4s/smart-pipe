@@ -7,7 +7,7 @@ dotenv.config();
 
 const app: Express = express();
 const port = process.env.API_PORT || 3000;
-const mqttBroker = process.env.MQTT_BROKER || "mqtt://192.168.0.3:1883";
+const mqttBroker = process.env.MQTT_BROKER || "mqtt://192.168.0.6:1883";
 
 // Middleware
 app.use(cors());

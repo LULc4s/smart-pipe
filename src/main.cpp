@@ -14,7 +14,8 @@
 // --- CONFIGURAÇÕES WIFI E MQTT ---
 const char* ssid = "brisa-4067358"; 
 const char* password = "tuka6mku"; 
-const char* mqtt_server = "192.168.0.3";
+// IP do broker MQTT (defina para o IPv4 da sua máquina na rede local)
+const char* mqtt_server = "192.168.0.6";
 
 // Variavel que eviara os dados do sensor
 char msg_dados_sensor[50];   // Buffer da mensagem que será enviada via MQTT
