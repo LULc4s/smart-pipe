@@ -30,7 +30,7 @@ npm run dev
 
 ### .env
 ```ini
-MQTT_BROKER=mqtt://192.168.0.3:1883
+MQTT_BROKER=mqtt://10.212.80.58:1883
 API_PORT=3000
 NODE_ENV=development
 ```
@@ -122,8 +122,8 @@ fetch(`${API_URL}/api/dashboard`)
 
 **Backend não conecta MQTT?**
 ```bash
-ping 192.168.0.3
-mosquitto_sub -h 192.168.0.3 -t "#"
+ping 10.212.80.58
+mosquitto_sub -h 10.212.80.58 -t "#"
 ```
 
 **Porta já em uso?**

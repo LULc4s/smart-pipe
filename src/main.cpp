@@ -12,10 +12,9 @@
 #include "modelo_vazao.h"
 
 // --- CONFIGURAÇÕES WIFI E MQTT ---
-const char* ssid = "brisa-4067358"; 
-const char* password = "tuka6mku"; 
-// IP do broker MQTT (defina para o IPv4 da sua máquina na rede local)
-const char* mqtt_server = "192.168.0.6";
+const char* ssid = "Galaxy A32CFA1"; 
+const char* password = "cfgd04937"; 
+const char* mqtt_server = "10.212.80.58";
 
 // Variavel que eviara os dados do sensor
 char msg_dados_sensor[50];   // Buffer da mensagem que será enviada via MQTT
@@ -49,18 +48,10 @@ uint8_t tensor_arena[kTensorArenaSize];
 // Hora (0-23), Dia (0-6), Vazão Max (~25 L/min), Volume Max Dia (~9000 L)
 // Fórmula: Scale = 1.0 / (Max - Min)
 
-const float X_min[4] =   {0.0, 0.0, 0.0, 0.0}; 
+const float X_min[4] =   {0.000000, 0.000000, 0.000000, 0.000000 }; 
 
-const float X_scale[4] = {
-    0.043478,  // Hora: 1/23
-    0.166667,  // Dia: 1/6
-    0.040000,  // Vazão Atual: 1/25 (Considerando pico máx de 25 L/min)
-    0.000111   // Volume Acumulado: 1/9000 (Considerando consumo máx dia de 9000L)
-}; 
+const float X_scale[4] = {0.043478, 0.166667, 0.043168, 0.000092}; 
 
-// Normalização do Alvo (Saída - Vazão Futura)
-const float y_min = 0.0;
-const float y_scale = 0.040000; // Mesma escala da Vazão Atual
 
 // --- VARIÁVEIS DE ESTADO E ACUMULADORES ---
 int current_hour = 0;
@@ -261,18 +252,47 @@ void loop() {
     if (interpreter->Invoke() != kTfLiteOk) {
         error_reporter->Report("A inferência falhou.");
     } else {
-        float predicted_scaled = output->data.f[0];
-        // Desnormalização da saída
-        float predicted_real = (predicted_scaled / y_scale) + y_min;
+        float prob_falta = output->data.f[0];   // Falta de água
+        float prob_atencao = output->data.f[1]; // Atenção
+        float prob_normal = output->data.f[2];  // Vazão Normal
+        float prob_anormal = output->data.f[3]; // Anormal
 
-        Serial.print("PREVISÃO (próx 15m): ");
-        Serial.print(predicted_real, 3);
-        Serial.println(" L/min");
+        int estado_previsto = 0;
+        float maior_probabilidade = prob_falta;
+
+        if (prob_atencao > maior_probabilidade) {
+            estado_previsto = 1;
+            maior_probabilidade = prob_atencao;
+        }
+        if (prob_normal > maior_probabilidade) {
+            estado_previsto = 2;
+            maior_probabilidade = prob_normal;
+        }
+
+        Serial.print("PREVISÃO DE ESTADO (próx 15m): ");
         
-        // Enviar previsão via MQTT
-        char msg[10];
-        dtostrf(predicted_real, 4, 2, msg);
-        client.publish("sensor/previsao", msg);
+        switch (estado_previsto) {
+            case 0:
+                Serial.println("[CRÍTICO] FALTA DE ÁGUA IMINENTE");
+                client.publish("alerta/status", "FALTA DE AGUA");
+                break;
+            case 1:
+                Serial.println("[ATENÇÃO] VAZÃO BAIXA PREVISTA");
+                client.publish("alerta/status", "ATENCAO");
+                break;
+            case 2:
+                Serial.println("[OK] VAZÃO NORMALIZADA");
+                client.publish("alerta/status", "NORMAL");
+                break; 
+            case 3: 
+                Serial.println("[ANORMAL] VAZÃO ACIMA DO NORMAL");
+                client.publish("alerta/status", "ANORMAL");
+                break;
+        }
+        
+        Serial.print("Confiança do modelo: ");
+        Serial.print(maior_probabilidade * 100);
+        Serial.println("%");
     }
 
     Serial.println("-------------------------------------------");
