@@ -1,0 +1,22 @@
+matplotlib
+pandas
+requests
+python-dotenv
+
+# LangChain & ecossistema (versões recentes em 2025)
+langchain
+langchain-core
+langchain-community
+langchain-openai
+
+# LangGraph — compatível com versões recentes do LangChain / LangGraph (Python 3.9+)
+langgraph
+
+# LangSmith — versão recente
+langsmith
+
+# Tavily — pacote atualizado
+langchain-tavily
+
+# FAISS
+faiss-cpu
