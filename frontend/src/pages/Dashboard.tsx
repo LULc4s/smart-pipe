@@ -5,10 +5,9 @@ import { SystemAlerts } from "@/components/dashboard/SystemAlerts";
 import { FlowChart } from "@/components/dashboard/FlowChart";
 import { PredictionCard } from "@/components/dashboard/PredictionCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { toast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -18,37 +17,73 @@ const Dashboard = () => {
   const [alerts, setAlerts] = useState<Array<{ type: string; message: string; time: string }>>([]);
   const [flowHistory, setFlowHistory] = useState<Array<{ time: string; flow: number }>>([]);
   const [prediction, setPrediction] = useState(0);
-  const [systemOnline, setSystemOnline] = useState(false);
 
-  // Busca dados da API em tempo real
+  // Simulação de dados em tempo real
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/dashboard`);
-        if (!response.ok) throw new Error("Erro ao conectar com servidor");
+    const interval = setInterval(() => {
+      // Simula variação de vazão (0-30 L/min)
+      const newFlow = Math.max(0, 15 + Math.random() * 10 - 5);
+      setCurrentFlow(newFlow);
 
-        const data = await response.json();
-        setCurrentFlow(data.sensor.currentFlow);
-        setTotalVolume(data.sensor.dailyVolume);
-        setHydroVolume(data.sensor.hydroVolume);
-        setPrediction(data.prediction);
-        setFlowHistory(data.history);
-        setAlerts(data.status.alerts);
-        setSystemOnline(data.status.isConnected);
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-        setSystemOnline(false);
+      // Atualiza volume total
+      setTotalVolume(prev => prev + (newFlow / 60 / 60)); // L/s para L
+      setHydroVolume(prev => prev + (newFlow / 60 / 60) * (1 + (Math.random() - 0.5) * 0.05)); // Simula erro
+
+      // Atualiza histórico
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      setFlowHistory(prev => [...prev.slice(-19), { time: timeStr, flow: newFlow }]);
+
+      // Simula predição
+      setPrediction(15 + Math.random() * 5);
+
+      // Simula alertas ocasionais
+      if (Math.random() < 0.05 && alerts.length < 5) {
+        const alertTypes = [
+          { type: "warning", message: "Pressão acima do normal detectada" },
+          { type: "info", message: "Consumo acima da média para este horário" },
+          { type: "success", message: "Sistema operando normalmente" }
+        ];
+        const alert = alertTypes[Math.floor(Math.random() * alertTypes.length)];
+        setAlerts(prev => [{ ...alert, time: timeStr }, ...prev.slice(0, 4)]);
       }
-    };
-
-    // Busca inicial
-    fetchData();
-
-    // Atualização em tempo real (a cada 1 segundo)
-    const interval = setInterval(fetchData, 1000);
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [alerts.length]);
+
+  const downloadCSV = () => {
+    // Create CSV content
+    const headers = ["Horário", "Vazão (L/min)", "Volume Total (L)", "Volume Hidrômetro (L)", "Predição (L/min)"];
+    const rows = flowHistory.map((item, index) => [
+      item.time,
+      item.flow.toFixed(2),
+      (totalVolume * (index + 1) / flowHistory.length).toFixed(2),
+      (hydroVolume * (index + 1) / flowHistory.length).toFixed(2),
+      prediction.toFixed(2)
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `smart-pipe-dados-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Download iniciado",
+      description: "Os dados foram exportados para CSV com sucesso.",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,11 +99,15 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">Monitoramento em Tempo Real</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className={`h-3 w-3 rounded-full ${systemOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-sm text-muted-foreground">
-                {systemOnline ? "Sistema Online" : "Desconectado"}
-              </span>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" size="sm" onClick={downloadCSV}>
+                <Download className="h-4 w-4 mr-2" />
+                Exportar CSV
+              </Button>
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-sm text-muted-foreground">Sistema Online</span>
+              </div>
             </div>
           </div>
         </div>
