@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useDashboardSocket } from "@/hooks/useDashboardSocket";
 import { FlowMonitor } from "@/components/dashboard/FlowMonitor";
 import { VolumeStats } from "@/components/dashboard/VolumeStats";
 import { SystemAlerts } from "@/components/dashboard/SystemAlerts";
@@ -11,46 +12,20 @@ import { toast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [currentFlow, setCurrentFlow] = useState(0);
-  const [totalVolume, setTotalVolume] = useState(0);
-  const [hydroVolume, setHydroVolume] = useState(0);
-  const [alerts, setAlerts] = useState<Array<{ type: string; message: string; time: string }>>([]);
-  const [flowHistory, setFlowHistory] = useState<Array<{ time: string; flow: number }>>([]);
-  const [prediction, setPrediction] = useState(0);
+  const { data, isConnected, error } = useDashboardSocket();
 
-  // Simulação de dados em tempo real
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simula variação de vazão (0-30 L/min)
-      const newFlow = Math.max(0, 15 + Math.random() * 10 - 5);
-      setCurrentFlow(newFlow);
+    if (error) {
+      toast({ title: "Erro de conexão", description: String(error) });
+    }
+  }, [error]);
 
-      // Atualiza volume total
-      setTotalVolume(prev => prev + (newFlow / 60 / 60)); // L/s para L
-      setHydroVolume(prev => prev + (newFlow / 60 / 60) * (1 + (Math.random() - 0.5) * 0.05)); // Simula erro
-
-      // Atualiza histórico
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      setFlowHistory(prev => [...prev.slice(-19), { time: timeStr, flow: newFlow }]);
-
-      // Simula predição
-      setPrediction(15 + Math.random() * 5);
-
-      // Simula alertas ocasionais
-      if (Math.random() < 0.05 && alerts.length < 5) {
-        const alertTypes = [
-          { type: "warning", message: "Pressão acima do normal detectada" },
-          { type: "info", message: "Consumo acima da média para este horário" },
-          { type: "success", message: "Sistema operando normalmente" }
-        ];
-        const alert = alertTypes[Math.floor(Math.random() * alertTypes.length)];
-        setAlerts(prev => [{ ...alert, time: timeStr }, ...prev.slice(0, 4)]);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [alerts.length]);
+  const currentFlow = data?.sensor?.currentFlow ?? 0;
+  const totalVolume = data?.sensor?.dailyVolume ?? 0;
+  const hydroVolume = data?.sensor?.hydroVolume ?? 0;
+  const alerts = data?.status?.alerts ?? [];
+  const flowHistory = data?.history ?? [];
+  const prediction = data?.prediction ?? 0;
 
   const downloadCSV = () => {
     // Create CSV content
@@ -105,8 +80,8 @@ const Dashboard = () => {
                 Exportar CSV
               </Button>
               <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-sm text-muted-foreground">Sistema Online</span>
+                <div className={`h-3 w-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">{isConnected ? 'Sistema Online' : 'Offline'}</span>
               </div>
             </div>
           </div>

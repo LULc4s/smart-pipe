@@ -33,6 +33,8 @@ npm run dev
 MQTT_BROKER=mqtt://10.212.80.58:1883
 API_PORT=3000
 NODE_ENV=development
+# URL do frontend (usado pelo CORS/Socket.IO)
+FRONTEND_URL=http://localhost:5173
 ```
 
 ## 📡 Endpoints

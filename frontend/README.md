@@ -6,6 +6,28 @@
 
 ## How can I edit this code?
 
+## Backend Integration
+
+To run the frontend alongside the backend (dev), start the backend first:
+
+```bash
+# from backend/
+npm install
+cp .env.example .env
+# Optionally set FRONTEND_URL in .env to http://localhost:5173
+npm run dev
+```
+
+Then start the frontend:
+
+```bash
+# from frontend/
+npm install
+npm run dev
+```
+
+The frontend expects the backend at `http://localhost:3000` by default and the Vite dev server runs on `http://localhost:5173`.
+
 There are several ways of editing your application.
 
 **Use Lovable**

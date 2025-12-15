@@ -14,7 +14,7 @@ const app: Express = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:8080",
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
   },
 });
@@ -23,7 +23,7 @@ const port = process.env.API_PORT || 3000;
 const mqttBroker = process.env.MQTT_BROKER || "mqtt://10.212.80.58:1883";
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
 app.use(express.json());
 
 // ============== TIPOS ==============

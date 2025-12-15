@@ -84,8 +84,4 @@ export const FlowMonitor = ({ currentFlow }: FlowMonitorProps) => {
     </Card>
   );
 };
-      </CardContent>
-    </Card>
-  );
-};
 
