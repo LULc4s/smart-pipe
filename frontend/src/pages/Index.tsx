@@ -4,6 +4,7 @@ import { Features } from "@/components/Features";
 import { MoreFeatures } from "@/components/MoreFeatures";
 import { HowItWorks } from "@/components/HowItWorks";
 import { CallToAction } from "@/components/CallToAction";
+import Chatbot from "@/components/Chatbot";
 
 const Index = () => {
   return (
@@ -14,6 +15,7 @@ const Index = () => {
       <MoreFeatures />
       <HowItWorks />
       <CallToAction />
+      <Chatbot />
     </main>
   );
 };
