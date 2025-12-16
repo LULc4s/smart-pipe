@@ -289,10 +289,6 @@ void loop() {
                 client.publish("alerta/status", "ANORMAL");
                 break;
         }
-        
-        Serial.print("Confiança do modelo: ");
-        Serial.print(maior_probabilidade * 100);
-        Serial.println("%");
     }
 
     Serial.println("-------------------------------------------");

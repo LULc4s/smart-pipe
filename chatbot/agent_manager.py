@@ -98,7 +98,7 @@ class Manager:
         final_state = self.graph.invoke(initial_state)
 
        
-        df_path =  Path("C:/Users/DELL/Documents/Projeto_Smart_Pipe/smart-pipe-backend/smart-pipe/dados_recebidos.csv")
+        df_path =  Path("C:/Users/DELL/Documents/Projeto_Smart_Pipe/smart-pipe-backend/smart-pipe/model/dados_vazao.csv")
     
         logging.info("Generated visualizations for the last 30 days and last 12 months.")
 

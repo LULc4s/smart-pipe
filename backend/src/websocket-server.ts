@@ -12,9 +12,15 @@ dotenv.config();
 
 const app: Express = express();
 const httpServer = createServer(app);
+
+// Permitir múltiplas origens em desenvolvimento (Vite pode usar outra porta)
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL]
+  : ["http://localhost:5173", "http://localhost:8081", "http://localhost:8080"];
+
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
   },
 });
@@ -23,7 +29,7 @@ const port = process.env.API_PORT || 3000;
 const mqttBroker = process.env.MQTT_BROKER || "mqtt://10.212.80.58:1883";
 
 // Middleware
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 // ============== TIPOS ==============

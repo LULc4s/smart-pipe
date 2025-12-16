@@ -5,7 +5,8 @@ from pathlib import Path
 
 # Use forward slashes or Path to avoid any escape-sequence interpretation in
 # Windows paths. Passing a `str` to Manager to keep compatibility.
-PATH = Path("C:/Users/DELL/Documents/Projeto_Smart_Pipe/smart-pipe-backend/smart-pipe/dados_recebidos.csv")
+PATH = Path("C:/Users/DELL/Documents/Projeto_Smart_Pipe/smart-pipe-backend/smart-pipe/model/dados_vazao.csv")
+
 
 question = input("Digite a pergunta: ")
 
